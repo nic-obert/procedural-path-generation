@@ -27,12 +27,12 @@ final int HEIGHT = 50;
 final int CELL_SIZE = 10;
 
 //final int SEED = round(random(10000000));
-//final int SEED = 5;
+final int SEED = 5;
 
 float OBSTACLE_SCALE = 0.18f;
 float OBSTACLE_THRESHOLD = 0.6f;
 
-final int PATH_LENGTH = 200;
+final int PATH_LENGTH = 20;
 
 float LAST_DIRECTION_WEIGHT = 0.5f;
 
@@ -58,24 +58,8 @@ class Point {
 }
 
 
-class Vector {
-
-    public Point point;
-    public Directions direction;
-
-    public Vector(Point point, Directions direction) {
-        this.point = point;
-        this.direction = direction;
-    }
-
-    public String toString() {
-        return "(" + point.toString() + ", " + direction.toString() + ")";
-    }
-}
-
-
 boolean isOutOfBounds(Point p) {
-    return p.x < 0 || p.x > WIDTH - 1 || p.y < 0 || p.y > HEIGHT - 1;
+    return p.x < 1 || p.x > WIDTH - 2 || p.y < 1 || p.y > HEIGHT - 2;
 }
 
 
@@ -129,16 +113,7 @@ void drawAllMaps() {
 void generateObstacleMap() {
     for (int x = 0; x < WIDTH; x++) {
         for (int y = 0; y < HEIGHT; y++) {
-            obstacleMap[x][y] = noise(x * OBSTACLE_SCALE, y * OBSTACLE_SCALE) > OBSTACLE_THRESHOLD;
-        }
-    }
-}
-
-
-void clearPathMap() {
-    for (int x = 0; x < WIDTH; x++) {
-        for (int y = 0; y < HEIGHT; y++) {
-            pathMap[x][y] = false;
+            obstacleMap[x][y] = noise(x * OBSTACLE_SCALE, y * OBSTACLE_SCALE, SEED) > OBSTACLE_THRESHOLD;
         }
     }
 }
@@ -173,20 +148,6 @@ void keyPressed() {
             generateObstacleMap();
             drawObstacleMap();
             break;
-        
-        case 'c':
-            clearPathMap();
-            drawPathMap();
-            break;
-        
-        case 'r':
-            randomSeed(round(random(10000000)));
-            noiseSeed(round(random(10000000)));
-            generateObstacleMap();
-            clearPathMap();
-            drawAllMaps();          
-            break;
-
     }
 }
 
@@ -203,23 +164,6 @@ enum Directions {
     private Directions(int value) {
         this.value = value;
     }
-
-    public String toString() {
-        switch (this) {
-            case UP:
-                return "UP";
-            case DOWN:
-                return "DOWN";
-            case LEFT:
-                return "LEFT";
-            case RIGHT:
-                return "RIGHT";
-            case NONE:
-                return "NONE";
-        }
-        return "";
-    }
-
 }
 
 
@@ -238,7 +182,7 @@ final Directions[][] PERPENDICULAR = new Directions[][] {
     {Directions.UP, Directions.DOWN}     // RIGHT
 };
 
- //<>//
+
 final Directions[] OPPOSITE = new Directions[] {
     Directions.DOWN, // UP
     Directions.UP,   // DOWN
@@ -253,7 +197,7 @@ Point addDirection(Point p, Directions direction) {
         return new Point(p.x, p.y + direction.value);
     }
     // LEFT-RIGHT
-    return new Point(p.x + direction.value, p.y); //<>// //<>//
+    return new Point(p.x + direction.value, p.y);
 }
 
 
@@ -267,103 +211,68 @@ boolean isValidPoint(Point p) {
 }
 
 
-Vector nextPoint(Vector vec) {
-
-    Point location = vec.point;
-    Directions last = vec.direction; //<>//
+Point nextPoint(Point location, Directions last) {
     
     float rand = random(1);
-     //<>//
+    
     // Check if the last direction is valid
     // The last direction is always preferred to form straight paths
     Point lastDirPoint = addDirection(location, last);
     if (isValidPoint(lastDirPoint)) {
         if (rand < LAST_DIRECTION_WEIGHT) {
-            return new Vector(lastDirPoint, last);
+            return lastDirPoint;
         }
     }
 
     // Check if one perpendicular direction is valid
     if (rand < (1f - LAST_DIRECTION_WEIGHT) / 2f) {
-        Directions perpendicular = PERPENDICULAR[last.ordinal()][0]; //<>//
+        Directions perpendicular = PERPENDICULAR[last.ordinal()][0];
         Point newP = addDirection(location, perpendicular);
-        if (isValidPoint(newP)) { //<>//
-            return new Vector(newP, perpendicular); //<>//
+        if (isValidPoint(newP)) {
+            return newP;
         }
     }
- 
+
     // If the previous perpendicular direction is not valid,
     // check for the other perpendicular direction
     Directions perpendicular = PERPENDICULAR[last.ordinal()][1];
     Point newP = addDirection(location, perpendicular);
     if (isValidPoint(newP)) {
-        return new Vector(newP, perpendicular);
+        return newP;
     }
 
     // If no other direction is valid, return the direction opposite to the last direction
     // The opposite direction is always valid, as it corresponds to going back one step
-    return new Vector(addDirection(location, OPPOSITE[last.ordinal()]), OPPOSITE[last.ordinal()]); //<>//
+    return addDirection(location, OPPOSITE[last.ordinal()]);
 }
 
 
 Directions randomDirection(Point location) {
-    int rand = floor(random(4));
-    Directions direction = DIRECTIONS[rand];
-    // Check if the direction is valid
-    Point newP = addDirection(location, direction);
-    if (isValidPoint(newP)) {
-        return direction;
+    while (true) {
+        int rand = floor(random(4));
+        Directions direction = DIRECTIONS[rand];
+        // Check if the direction is valid
+        Point newP = addDirection(location, direction);
+        if (isValidPoint(newP)) {
+            return direction;
+        }
     }
-
-    // Try with the other directions
-    Directions newDir = PERPENDICULAR[direction.ordinal()][0];
-    newP = addDirection(location, newDir);
-    if (isValidPoint(newP)) {
-        return newDir;
-    }
-
-    newDir = PERPENDICULAR[direction.ordinal()][1];
-    newP = addDirection(location, newDir);
-    if (isValidPoint(newP)) {
-        return newDir;
-    }
-
-    newDir = OPPOSITE[direction.ordinal()];
-    newP = addDirection(location, newDir);
-    if (isValidPoint(newP)) {
-        return newDir;
-    }
-
-    // If no direction is possible, return NONE
-    return Directions.NONE;
 }
 
 
 void generatePath(Point start) {
 
-    Directions direction = randomDirection(start);
-
-    if (direction == Directions.NONE) {
-        return;
-    }
-
-    Vector vec = new Vector(
-        start,
-        direction
-    );
-
-    drawCell(start, color(255, 0, 0));
-    pathMap[start.x][start.y] = true;
+    Directions lastDirection = randomDirection(start);
 
     for (int length = 0; length < PATH_LENGTH; length ++) {
 
-        vec = nextPoint(vec);
-        pathMap[vec.point.x][vec.point.y] = true;
+        Point p = nextPoint(start, lastDirection);
+        pathMap[p.x][p.y] = true;
 
-        println("Current vector: " + vec);
+        println("Current point: " + p);
 
-        drawCell(vec.point, color(255, 0, 0));
-        //delay(200);
+        drawCell(p, color(255, 0, 0));
+        delay(200);
 
     }
 
@@ -419,7 +328,7 @@ void mousePressed() {
 
 void setup() {
     size(700, 500);
-    //randomSeed(SEED);
+    randomSeed(SEED);
     background(#000000);
     generateObstacleMap();
     drawObstacleMap();
@@ -427,5 +336,5 @@ void setup() {
 
 
 void draw() {
-    drawAllMaps();
+
 }
