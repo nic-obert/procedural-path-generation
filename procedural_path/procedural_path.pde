@@ -34,19 +34,34 @@ float OBSTACLE_THRESHOLD = 0.6f;
 
 final int PATH_LENGTH = 20;
 
+float LAST_DIRECTION_WEIGHT = 0.5f;
+
 
 boolean[][] obstacleMap = new boolean[WIDTH][HEIGHT];
 boolean[][] pathMap = new boolean[WIDTH][HEIGHT];
 
 
-boolean isOutOfBounds(int x, int y) {
-    return x < 1 || x > WIDTH - 2 || y < 1 || y > HEIGHT - 2;
+class Point {
+
+    public int x;
+    public int y;
+
+    public Point(int x, int y) {
+        this.x = x;
+        this.y = y;
+    }
+
 }
 
 
-void drawCell(int x, int y, color col) {
+boolean isOutOfBounds(Point p) {
+    return p.x < 1 || p.x > WIDTH - 2 || p.y < 1 || p.y > HEIGHT - 2;
+}
+
+
+void drawCell(Point p, color col) {
     fill(col);
-    rect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+    rect(p.x * CELL_SIZE, p.y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
 }
 
 
@@ -54,8 +69,9 @@ void drawObstacleMap() {
     background(255);
     for (int x = 0; x < WIDTH; x++) {
         for (int y = 0; y < HEIGHT; y++) {
-            if (obstacleMap[x][y]) {
-                drawCell(x, y, color(100, 100, 100));
+            Point point = new Point(x, y);
+            if (isObstacle(point)) {
+                drawCell(point, color(100, 100, 100));
             }
         }
     }
@@ -67,7 +83,7 @@ void drawPathMap() {
     for (int x = 0; x < WIDTH; x++) {
         for (int y = 0; y < HEIGHT; y++) {
             if (pathMap[x][y]) {
-                drawCell(x, y, color(255, 0, 0));
+                drawCell(new Point(x, y), color(255, 0, 0));
             }
         }
     }
@@ -78,11 +94,12 @@ void drawAllMaps() {
     background(255);
     for (int x = 0; x < WIDTH; x++) {
         for (int y = 0; y < HEIGHT; y++) {
-            if (obstacleMap[x][y]) {
-                drawCell(x, y, color(100, 100, 100));
+            Point point = new Point(x, y);
+            if (isObstacle(point)) {
+                drawCell(point, color(100, 100, 100));
             }
-            if (pathMap[x][y]) {
-                drawCell(x, y, color(255, 0, 0));
+            else if (pathMap[x][y]) {
+                drawCell(point, color(255, 0, 0));
             }
         }
     }
@@ -132,47 +149,138 @@ void keyPressed() {
 
 
 enum Directions {
-    UP, DOWN, LEFT, RIGHT, NONE
+    UP(-1),
+    DOWN(1),
+    LEFT(-1),
+    RIGHT(1),
+    NONE(0)
 }
 
 
-Directions randomDirection(Directions last, Directions[] available) {
-    
-    
+final Directions[] DIRECTIONS = {
+    Directions.UP,
+    Directions.DOWN,
+    Directions.LEFT,
+    Directions.RIGHT
+};
 
+
+final Directions[][] PERPENDICULAR = new Directions[][] {
+    {Directions.LEFT, Directions.RIGHT}, // UP
+    {Directions.LEFT, Directions.RIGHT}, // DOWN
+    {Directions.UP, Directions.DOWN},    // LEFT
+    {Directions.UP, Directions.DOWN}     // RIGHT
+};
+
+
+final Direction[] OPPOSITE = new Directions[] {
+    Directions.DOWN, // UP
+    Directions.UP,   // DOWN
+    Directions.RIGHT,// LEFT
+    Directions.LEFT  // RIGHT
+};
+
+
+Point addDirection(Point p, Directions direction) {
+    // UP-DOWN
+    if (direction < Directions.LEFT) {
+        return new Point(p.x, p.y + direction.value);
+    }
+    // LEFT-RIGHT
+    return new Point(p.x + direction.value, p.y);
 }
 
 
-void generatePath(int x, int y) {
+boolean isObstacle(Point p) {
+    return obstacleMap[p.x][p.y];
+}
 
-    Directions lastDirection = Directions.NONE;
+
+boolean isValidPoint(Point p) {
+    return !isOutOfBounds(p) && !isObstacle(p);
+}
+
+
+Point nextPoint(Point location, Directions last) {
+    
+    float rand = random(1);
+    
+    // Check if the last direction is valid
+    // The last direction is always preferred to form straight paths
+    Point lastDirPoint = addDirection(location, last);
+    if (isValidPoint(lastDirPoint)) {
+        if (rand < LAST_DIRECTION_WEIGHT) {
+            return lastDirPoint;
+        }
+    }
+
+    // Check if one perpendicular direction is valid
+    if (rand < (1f - LAST_DIRECTION_WEIGHT) / 2f) {
+        Direction perpendicular = PERPENDICULAR[last][0];
+        Point newP = addDirection(location, perpendicular);
+        if (isValidPoint(newP)) {
+            return newP;
+        }
+    }
+
+    // If the previous perpendicular direction is not valid,
+    // check for the other perpendicular direction
+    Direction perpendicular = PERPENDICULAR[last][1];
+    Point newP = addDirection(location, perpendicular);
+    if (isValidPoint(newP)) {
+        return newP;
+    }
+
+    // If no other direction is valid, return the direction opposite to the last direction
+    // The opposite direction is always valid, as it corresponds to going back one step
+    return OPPOSITE[last];
+}
+
+
+Directions randomDirection(Point location) {
+    while (true) {
+        int rand = floor(random(4));
+        Directions direction = DIRECTIONS[rand];
+        // Check if the direction is valid
+        Point newP = addDirection(location, direction);
+        if (isValidPoint(newP)) {
+            return direction;
+        }
+    }
+}
+
+
+void generatePath(Point start) {
+
+    Directions lastDirection = randomDirection(start);
 
     for (int length = 0; length < PATH_LENGTH; length ++) {
 
-        // 
+        Point p = nextPoint(start, lastDirection);
+        pathMap[p.x][p.y] = true;
 
     }
 
 }
 
 
-Directions[] getAvailableDirections(int x, int y) {
+Directions[] getAvailableDirections(Point p) {
     Directions[] directions = new Directions[4];
     int index = 0;
     
-    if (!isOutOfBounds(x - 1, y) && !obstacleMap[x - 1][y]) {
+    if (isValidPoint(new Point(p.x - 1, p.y)) {
         directions[index] = Directions.LEFT;
         index++;
     }
-    if (!isOutOfBounds(x + 1, y) && !obstacleMap[x + 1][y]) {
+    if (isValidPoint(new Point(p.x + 1, p.y)) {
         directions[index] = Directions.RIGHT;
         index++;
     }
-    if (!isOutOfBounds(x, y - 1) && !obstacleMap[x][y - 1]) {
+    if (isValidPoint(new Point(p.x, p.y - 1)) {
         directions[index] = Directions.UP;
         index++;
     }
-    if (!isOutOfBounds(x, y + 1) && !obstacleMap[x][y + 1]) {
+    if (isValidPoint(new Point(p.x, p.y + 1)) {
         directions[index] = Directions.DOWN;
         index++;
     }
@@ -185,7 +293,7 @@ void mousePressed() {
     int x = floor(mouseX / CELL_SIZE);
     int y = floor(mouseY / CELL_SIZE);
 
-    if isOutOfBounds(x, y) {
+    if (isOutOfBounds(x, y)) {
         println("Out of bounds cell at " + x + ", " + y);
         return;
     }
